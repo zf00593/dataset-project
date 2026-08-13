@@ -478,11 +478,17 @@ def make_synthetic(idx: int, fake: Faker, rng: random.Random,
         dwell = max(0, int(rng.lognormvariate(3.3, 1.1)))
     dwell = min(dwell, 900)
 
-    d_disc = d_occ + timedelta(days=dwell)
+    # Right-censor at the window end: an incident cannot be discovered or
+    # disclosed after the dataset's own cut-off. Without this, a long-dwell
+    # intrusion drawn near the end spills into a stray future period and shows
+    # up as a phantom tick on every timeline chart.
+    d_disc = min(d_occ + timedelta(days=dwell), end)
+    dwell = (d_disc - d_occ).days
+
     disclose_lag = max(0, int(rng.lognormvariate(1.8, 0.9)))
     if reg_heavy:
         disclose_lag = min(disclose_lag, 72)
-    d_disclosed = d_disc + timedelta(days=min(disclose_lag, 400))
+    d_disclosed = min(d_disc + timedelta(days=min(disclose_lag, 400)), end)
 
     # --- impact ------------------------------------------------------------ #
     if inc_type in ("DDoS", "Business email compromise", "Destructive malware"):

@@ -1,19 +1,7 @@
 """
 visualise.py
-============
 
 Renders every figure from IncidentAnalysis.
-
-    python visualise.py                 # everything, into ./figures/
-    python visualise.py --only map      # one figure by name
-
-Static figures are PNG at 200 dpi (fine for slides). The map is a standalone
-self-contained HTML file — open it in a browser, no server needed.
-
-HONESTY RULE APPLIED THROUGHOUT: every figure drawn from synthetic rows carries
-a footnote saying so. If a chart mixes real and synthetic, the real points are
-drawn in a distinct colour and labelled. Charts derived from generator-computed
-fields (severity, cost) are not rendered at all — they would be circular.
 """
 
 from __future__ import annotations
@@ -31,9 +19,10 @@ from matplotlib.ticker import FuncFormatter
 from geo_reference import ISO2_TO_ISO3
 from incident_analysis import IncidentAnalysis
 
+# Output directory
 OUT = "figures"
 
-# Palette: one accent for human factor, one for technical, one for real incidents.
+# Palette
 INK = "#1f2933"
 MUTED = "#8896a6"
 HUMAN = "#c1442f"
@@ -41,6 +30,7 @@ TECH = "#3d6b8e"
 REAL = "#0f5c4a"
 GRID = "#dfe4ea"
 
+# Changes the matplotlib configuration for default for plots to have same style
 plt.rcParams.update({
     "figure.dpi": 200,
     "savefig.dpi": 200,
@@ -61,24 +51,32 @@ plt.rcParams.update({
 
 def _note(fig, text):
     """Footnote every figure with its provenance."""
+    # Foot note for figures
     fig.text(0.01, -0.04, text, fontsize=6.5, color=MUTED, ha="left", va="top")
 
 
 def _save(fig, name):
+    # Makes the output directory if it doesn't exist
     os.makedirs(OUT, exist_ok=True)
+    # Saves the figure to the output directory with the specified name and a .png extension
     path = os.path.join(OUT, f"{name}.png")
+    # saves the figure with tight bounding box and white background color
     fig.savefig(path, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    print(f"  {path}")
+    
+    # Returns the path the file was saved
     return path
 
 
 def _thousands(x, _):
+    # If the value is more than 10^9 it is billions
     if x >= 1e9:
         return f"{x/1e9:.1f}bn"
     if x >= 1e6:
+        # If the value is more than 10^6 it is millions
         return f"{x/1e6:.0f}M"
     if x >= 1e3:
+        # if the value is more than 10^3 it is thousands
         return f"{x/1e3:.0f}k"
     return f"{x:.0f}"
 

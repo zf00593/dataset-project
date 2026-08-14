@@ -6,34 +6,6 @@ Five-layer interactive map of the incident dataset.
 
     python map_layers.py                    # -> figures/incident_map.html
     python map_layers.py --csv other.csv --out mymap.html
-
-Layers, each independently toggleable, all driven by one year slider:
-
-  1. Incident bubbles at HQ, sized by people affected, coloured by entry vector.
-  2. Supply-chain arcs: breached organisation -> countries where affected people live.
-  3. Choropleth, records exposed per capita.
-  4. Choropleth, imported exposure (named as affected minus hosted as HQ), diverging.
-  5. Year slider over date_discovered, cumulative. Every layer redraws per frame.
-
-IMPLEMENTATION NOTES
-
-Arcs are ONE trace using None separators between segments, not one trace per
-arc. Hundreds of traces cannot be animated without the frame definitions
-exploding, and toggling their visibility individually is unusable.
-
-Animation frames deliberately carry only DATA keys (z, lat, lon, locations,
-marker.size, text, customdata) and never `visible`. If frames set visibility,
-they clobber the layer toggle buttons every time the slider moves.
-
-HONESTY NOTES, also rendered onto the map itself
-
-The arcs show where DATA subjects are relative to the breached organisation.
-They are not attacker origin. This dataset does not model attacker location,
-because public reporting almost never supports that claim with confidence.
-
-Country-level patterns in the synthetic rows are sampling artefacts of the
-generator's country weights, not measurements. The real incidents (27, drawn
-with a white outline) are the only rows where the country means anything.
 """
 
 from __future__ import annotations
@@ -48,6 +20,7 @@ import plotly.graph_objects as go
 from geo_reference import COUNTRY_META, ISO2_TO_ISO3
 from incident_analysis import IncidentAnalysis
 
+# The colour pallete
 HUMAN = "#c1442f"
 TECH = "#3d6b8e"
 INK = "#1f2933"
@@ -59,37 +32,27 @@ CENTROID = {k: (v[3], v[4]) for k, v in COUNTRY_META.items()}
 NAME = {k: v[0] for k, v in COUNTRY_META.items()}
 
 
-# --------------------------------------------------------------------------- #
-# Per-frame data
-# --------------------------------------------------------------------------- #
-
 def _country_layer(d: pd.DataFrame):
     """Records exposed per capita, per country of HQ."""
+    # Groups by country and then sums the number of records affected per country
     g = d.groupby("country", observed=True)["records_affected"].sum()
     iso3, z, txt = [], [], []
+    
+    # Loops through the grouped data and calculates the records per capita for each country
     for iso2, total in g.items():
         if iso2 not in ISO2_TO_ISO3 or iso2 not in POP:
             continue
         iso3.append(ISO2_TO_ISO3[iso2])
+        # Calculates the records per capita by dividing the total records affected by the population of the country (in millions) and rounding to 3 decimal places
         z.append(round(total / (POP[iso2] * 1e6), 3))
+        # Creates a hover text for each country that includes the country name, total records affected, and records per capita
         txt.append(NAME[iso2])
+    # returns the ISO3 country codes, records per capita, and hover text for each country
     return iso3, z, txt
 
 
 def _imported_layer(d: pd.DataFrame):
     """Share of a country's exposure that traces to an organisation based elsewhere.
-
-    NOT the raw "named as affected minus hosted as HQ" difference. That measure
-    is structurally positive for every country: a multinational incident lists
-    its HQ country PLUS several others, so affected-counts always exceed HQ
-    counts globally and a diverging scale centred on zero would show one colour
-    everywhere. Checked against the data before drawing it — the range came back
-    39..71 with no negative values at all.
-
-    This instead asks: of all incidents that touch this country's people, what
-    fraction happened at an organisation headquartered somewhere else? That is
-    bounded 0-100, has a meaningful midpoint at 50, and answers the question a
-    trustee actually has — how much of our risk sits outside our jurisdiction.
     """
     ex = d.copy()
     ex["subject_list"] = ex["data_subject_countries"].fillna("").str.split("|")

@@ -139,6 +139,10 @@ COUNTRY_META = {
     "NG": ("Nigeria", "Africa", "Western Africa", 9.08, 8.68, 223.8),
     "BR": ("Brazil", "Americas", "South America", -14.24, -51.93, 216.4),
     "MX": ("Mexico", "Americas", "Central America", 23.63, -102.55, 128.5),
+    "ID": ("Indonesia", "Asia", "South-Eastern Asia", -6.20, 106.85, 277.5),
+       "MY": ("Malaysia", "Asia", "South-Eastern Asia", 3.14, 101.69, 34.1),
+       "VN": ("Vietnam", "Asia", "South-Eastern Asia", 21.03, 105.85, 101.0),
+       "PH": ("Philippines", "Asia", "South-Eastern Asia", 14.60, 120.98, 116.0),
 }
 
 # Plausible HQ cities per country, for jittered bubble placement on maps.

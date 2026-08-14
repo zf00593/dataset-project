@@ -194,12 +194,19 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Vector, count, percentage and class, descending by count.
         """
+        # Splits the data frame into groups based on the values in the specified column to have all unique permuatations in dataaset
+        # Then it counts how many records belong to each group
+        # Then it converts the grouped result into a data frame with a new column called count
+        # It then sorts the rows descending based on count and returns the first n
         out = (
             self.df.groupby(["attack_vector", "vector_class"], observed=True)
             .size().reset_index(name="count")
             .sort_values("count", ascending=False).head(n)
         )
+        
+        # Then it adds a new column for percentages 
         out["pct"] = (out["count"] / len(self.df) * 100).round(1)
+        # Adds a new index now for the successive rows
         return out.reset_index(drop=True)
 
     # ------------------------------------------------------------------ #

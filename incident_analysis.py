@@ -114,6 +114,7 @@ class IncidentAnalysis:
         )
         # Takes lgo base 10 on the number of records affected if greater than 0 (can't log 0)
         df["log10_records"] = np.log10(df["records_affected"].where(df["records_affected"] > 0))
+        #
         df["severity"] = pd.Categorical(df["severity"], SEVERITY_ORDER, ordered=True)
         df["sensitive_data"] = df["data_types_exposed"].str.contains(
             "health|safeguarding|ssn_or_ni_number|bank_details|credit_card", na=False
@@ -660,6 +661,17 @@ class IncidentAnalysis:
         out["incident_name"] = row["incident_name"]
         out["organisation"] = row["organisation"]
         return out
+    
+    
+        
+        unclassified = df["vector_class"] == "Other"
+        df.loc[unclassified, "vector_class"] = np.where(
+            df.loc[unclassified, "attack_vector"].str.contains(
+                "credential|phish|social engineering|supplier|MFA", case=False, na=False
+            ),
+            "Human factor",
+            "Technical",
+        )
 
 
 if __name__ == "__main__":

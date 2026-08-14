@@ -2,101 +2,144 @@
 settlements.py
 ==============
 
-Location spreading for the incident generator.
+Location placement for the incident generator.
 
-PROBLEM THIS SOLVES
+WHAT CHANGED AND WHY
 
-The original generator picked one of ~71 city anchors and jittered by ±0.15°.
-At 1,000 rows that looked fine. At 30,000 rows every incident stacks into 71
-dots, which is both ugly and wrong: charities, councils, GP practices, schools
-and small manufacturers are overwhelmingly NOT headquartered in city centres.
+v1 used ~71 hand-typed city anchors and jittered around them. Two problems
+showed up at 30k rows: everything still clustered on those anchors, and rural
+offsets dropped points into the sea because nothing checked whether the
+coordinate was on land.
 
-APPROACH
+v2 uses real data:
 
-Three settlement types, weighted by organisation type:
+  * geonamescache — 34,006 cities worldwide with population and coordinates.
+    For the 26 countries here that is thousands of real anchors instead of 71,
+    including 865 in the UK alone, down to ~15k population.
 
-  city   — one of the named metro anchors, small jitter
-  town   — a named secondary town where we have one, else a satellite offset
-  rural  — a larger offset from the nearest named place, bearing biased inland
+  * global-land-mask — a 1 km land/ocean grid. Every generated coordinate is
+    tested and resampled until it lands on solid ground.
 
-Rural bearings are biased toward the country centroid rather than drawn
-uniformly. A uniform bearing off a coastal anchor like Brighton or Aberdeen
-drops a meaningful share of points into the sea. The bias does not eliminate
-that — there is no coastline test here without a shapefile — but it cuts it
-sharply. If you need guaranteed-on-land points, that needs a real geometry
-dependency, and you should not pretend precision this data does not have.
+Both are optional. If either import fails the module falls back to the
+hand-typed anchors in geo_reference, warns once on stderr, and skips the land
+test — the generator still runs, the map just looks worse.
 
-The resulting coordinates are FICTIONAL PLACEMENTS for synthetic rows. They
-exist so a map reads as a country rather than a constellation. They are not
-claims that anything happened at that point.
+WHAT THE COORDINATES MEAN
+
+For synthetic rows these are fictional placements, chosen so a map reads as a
+populated country rather than a constellation of dots. A point near Kendal is
+not a claim that anything happened near Kendal. Real incidents use their actual
+HQ city and never pass through this module.
 """
 
 from __future__ import annotations
 
 import math
 import random
+import sys
 
-from geo_reference import CITIES, COUNTRY_META
+from geo_reference import CITIES, COUNTRY_META  # noqa: F401  (COUNTRY_META kept for callers)
 
-# Named secondary towns where having real names matters most (UK-heavy, since
-# that is the audience). (name, lat, lon)
-TOWNS = {
-    "GB": [
-        ("Scarborough", 54.283, -0.399), ("Truro", 50.263, -5.051),
-        ("Kendal", 54.328, -2.745), ("Hereford", 52.056, -2.716),
-        ("Lowestoft", 52.478, 1.751), ("Bangor", 53.228, -4.128),
-        ("Dumfries", 55.070, -3.605), ("Elgin", 57.649, -3.316),
-        ("Barnstaple", 51.081, -4.058), ("Louth", 53.367, -0.005),
-        ("Whitehaven", 54.549, -3.588), ("Boston", 52.979, -0.026),
-        ("Aberystwyth", 52.415, -4.083), ("Oban", 56.415, -5.471),
-        ("Berwick-upon-Tweed", 55.771, -2.005), ("Bridgwater", 51.128, -2.994),
-        ("Grantham", 52.912, -0.641), ("Kidderminster", 52.388, -2.250),
-        ("Penrith", 54.665, -2.754), ("Melton Mowbray", 52.766, -0.886),
-        ("Bury St Edmunds", 52.246, 0.711), ("Haverfordwest", 51.801, -4.969),
-        ("Thurso", 58.594, -3.522), ("Stranraer", 54.903, -5.026),
-    ],
-    "US": [
-        ("Bozeman", 45.680, -111.038), ("Ithaca", 42.443, -76.502),
-        ("Duluth", 46.787, -92.100), ("Roanoke", 37.271, -79.941),
-        ("Flagstaff", 35.198, -111.651), ("Bangor", 44.801, -68.778),
-        ("Grand Junction", 39.064, -108.551), ("Dothan", 31.223, -85.390),
-        ("Sioux Falls", 43.550, -96.700), ("Missoula", 46.872, -113.994),
-        ("Wichita Falls", 33.914, -98.493), ("Traverse City", 44.763, -85.620),
-    ],
-    "IE": [("Sligo", 54.270, -8.476), ("Tralee", 52.270, -9.700),
-           ("Athlone", 53.423, -7.941)],
-    "AU": [("Toowoomba", -27.560, 151.954), ("Bendigo", -36.758, 144.278),
-           ("Kalgoorlie", -30.749, 121.466), ("Launceston", -41.439, 147.137)],
-    "CA": [("Kamloops", 50.675, -120.341), ("Sudbury", 46.492, -80.993),
-           ("Moncton", 46.088, -64.778)],
-    "NZ": [("Napier", -39.493, 176.912), ("Invercargill", -46.413, 168.351)],
-    "DE": [("Görlitz", 51.155, 14.987), ("Flensburg", 54.792, 9.437),
-           ("Passau", 48.573, 13.457)],
-    "FR": [("Limoges", 45.833, 1.261), ("Quimper", 47.996, -4.098),
-           ("Rodez", 44.350, 2.575)],
-    "ES": [("Teruel", 40.344, -1.107), ("Lugo", 43.012, -7.556)],
-    "IT": [("Potenza", 40.642, 15.799), ("Belluno", 46.140, 12.216)],
-    "SE": [("Östersund", 63.179, 14.636), ("Kalmar", 56.663, 16.357)],
-    "NO": [("Bodø", 67.280, 14.405), ("Ålesund", 62.472, 6.155)],
-    "PL": [("Zamość", 50.716, 23.252), ("Suwałki", 54.102, 22.930)],
-    "IN": [("Madurai", 9.925, 78.120), ("Guwahati", 26.145, 91.736),
-           ("Udaipur", 24.585, 73.712)],
-    "ZA": [("Polokwane", -23.904, 29.469), ("George", -33.963, 22.461)],
-    "KE": [("Kisumu", -0.092, 34.768), ("Eldoret", 0.514, 35.270)],
-    "NG": [("Jos", 9.897, 8.858), ("Enugu", 6.459, 7.548)],
-    "BR": [("Cuiabá", -15.601, -56.098), ("Teresina", -5.092, -42.804)],
-    "MX": [("Oaxaca", 17.073, -96.727), ("Durango", 24.028, -104.653)],
-}
+# --------------------------------------------------------------------------- #
+# Optional data dependencies
+# --------------------------------------------------------------------------- #
 
-# City-states have no meaningful hinterland. Offsetting from Singapore by 0.4°
-# puts the point in Johor or the Strait, i.e. another country entirely.
+try:
+    import geonamescache
+    _GC = geonamescache.GeonamesCache()
+    HAVE_CITIES = True
+except Exception:                                    # pragma: no cover
+    HAVE_CITIES = False
+
+try:
+    from global_land_mask import globe
+    HAVE_LANDMASK = True
+except Exception:                                    # pragma: no cover
+    HAVE_LANDMASK = False
+
+_WARNED = False
+
+
+def _warn_once():
+    global _WARNED
+    if _WARNED:
+        return
+    missing = []
+    if not HAVE_CITIES:
+        missing.append("geonamescache missing (using ~71 built-in city anchors)")
+    if not HAVE_LANDMASK:
+        missing.append("global-land-mask missing (points may land in the sea)")
+    if missing:
+        print("settlements.py: " + "; ".join(missing) +
+              "\n  pip install geonamescache global-land-mask", file=sys.stderr)
+    _WARNED = True
+
+
+# --------------------------------------------------------------------------- #
+# City pools
+# --------------------------------------------------------------------------- #
+
+CITY_MIN_POP = 250_000
+TOWN_MIN_POP = 15_000
+
+_POOLS: dict[str, dict] = {}
+
+
+def _pools(country: str):
+    """Cities and towns for a country as (name, lat, lon, weight) lists.
+
+    Sampling weight is population ** 0.4, NOT population. Raw population
+    weighting sends a huge share of UK rows to London and undoes the point of
+    having 865 anchors; the exponent keeps big cities likelier while leaving the
+    long tail real probability mass.
+    """
+    if country in _POOLS:
+        return _POOLS[country]
+
+    cities, towns = [], []
+    if HAVE_CITIES:
+        for c in _GC.get_cities().values():
+            if c["countrycode"] != country:
+                continue
+            pop = c.get("population") or 0
+            if pop < TOWN_MIN_POP:
+                continue
+            entry = (c["name"], float(c["latitude"]), float(c["longitude"]), pop ** 0.4)
+            (cities if pop >= CITY_MIN_POP else towns).append(entry)
+
+    if not cities and not towns:
+        _warn_once()
+        cities = [(n, la, lo, 1.0) for n, la, lo in CITIES.get(country, [])]
+
+    # Drop anchors whose own coordinate fails the land or bbox test. A handful
+    # of small coastal cities have centroids that read as ocean on a 1 km grid;
+    # excluding them here is cheaper than special-casing them at every call.
+    cities = [c for c in cities if _valid(country, c[1], c[2])] or cities
+    towns = [t for t in towns if _valid(country, t[1], t[2])] or towns
+
+    if not cities:
+        cities, towns = towns, []
+    if not towns:
+        towns = cities
+
+    _POOLS[country] = {"city": cities, "town": towns}
+    return _POOLS[country]
+
+
+def _pick(pool, rng: random.Random):
+    i = rng.choices(range(len(pool)), weights=[p[3] for p in pool], k=1)[0]
+    return pool[i][0], pool[i][1], pool[i][2]
+
+
+# --------------------------------------------------------------------------- #
+# Geometry
+# --------------------------------------------------------------------------- #
+
 CITY_STATES = {"SG"}
 
-# Approximate land bounding boxes, used only to clamp offsets back inside the
-# country. Clamping is crude — a clamped point can still sit just offshore —
-# but it prevents the worst failure, which is an incident attributed to the
-# wrong country because an offset crossed a border.
-# (lat_min, lat_max, lon_min, lon_max)
+# Approximate land bounding boxes. The land mask stops points falling in the
+# sea; this stops them falling in the wrong COUNTRY, which the land mask cannot
+# detect — a point in Johor is perfectly good land and completely wrong.
 BBOX = {
     "GB": (50.0, 58.6, -7.5, 1.7),   "IE": (51.4, 55.3, -10.4, -6.0),
     "US": (25.5, 48.9, -124.5, -67.0), "CA": (43.0, 60.0, -135.0, -53.0),
@@ -113,15 +156,6 @@ BBOX = {
     "BR": (-33.7, 4.2, -73.9, -34.8), "MX": (14.6, 32.6, -117.0, -86.8),
 }
 
-
-def _clamp(country, lat, lon):
-    b = BBOX.get(country)
-    if not b:
-        return lat, lon
-    return min(max(lat, b[0]), b[1]), min(max(lon, b[2]), b[3])
-
-
-# How likely each org type is to sit outside a metro centre.
 SETTLEMENT_WEIGHTS = {
     "nonprofit": {"city": 0.34, "town": 0.38, "rural": 0.28},
     "public":    {"city": 0.30, "town": 0.45, "rural": 0.25},
@@ -130,26 +164,57 @@ SETTLEMENT_WEIGHTS = {
 }
 
 
-def _bearing_toward(lat, lon, target_lat, target_lon):
-    """Compass bearing in radians from a point toward the country centroid."""
-    return math.atan2(target_lon - lon, target_lat - lat)
+def _in_bbox(country, lat, lon):
+    b = BBOX.get(country)
+    return True if not b else (b[0] <= lat <= b[1] and b[2] <= lon <= b[3])
+
+
+def _on_land(lat, lon):
+    if not HAVE_LANDMASK:
+        return True
+    try:
+        return bool(globe.is_land(lat, lon))
+    except Exception:
+        return True
+
+
+def _valid(country, lat, lon):
+    return _in_bbox(country, lat, lon) and _on_land(lat, lon)
 
 
 def _offset(lat, lon, distance_deg, bearing_rad):
-    """Move a point by a distance at a bearing, correcting longitude for latitude."""
     dlat = distance_deg * math.cos(bearing_rad)
     scale = max(math.cos(math.radians(lat)), 0.2)
     dlon = distance_deg * math.sin(bearing_rad) / scale
     return lat + dlat, lon + dlon
 
 
+def _scatter(country, lat, lon, lo, hi, rng, tries=25):
+    """Offset from an anchor, resampling until the point is on land in-country.
+
+    Falls back to the anchor itself if every attempt fails — which happens for
+    anchors on small islands or narrow peninsulas, where there is genuinely
+    nowhere within range to put it.
+    """
+    for _ in range(tries):
+        blat, blon = _offset(lat, lon, rng.uniform(lo, hi), rng.uniform(0, 2 * math.pi))
+        # Round FIRST, then validate. The land mask is a fine grid, and rounding
+        # a validated coordinate to 4 dp can shift it across a cell boundary
+        # from land to sea — which is exactly how ~1 in 2,000 coastal points
+        # were still ending up offshore after every other check passed.
+        blat, blon = round(blat, 4), round(blon, 4)
+        if _valid(country, blat, blon):
+            return blat, blon, True
+    return round(lat, 4), round(lon, 4), False
+
+
 def place(country: str, org_type: str, rng: random.Random):
-    """Pick a settlement type and coordinates for one synthetic organisation.
+    """Pick a settlement type and land-validated coordinates for one organisation.
 
     Args:
-        country (str): ISO2 code, must exist in CITIES.
+        country (str): ISO2 code.
         org_type (str): nonprofit / public / private / vendor.
-        rng (random.Random): Seeded generator, so placements are reproducible.
+        rng (random.Random): Seeded, so placements are reproducible.
 
     Returns:
         tuple: (settlement_type, place_label, lat, lon)
@@ -159,39 +224,22 @@ def place(country: str, org_type: str, rng: random.Random):
     if country in CITY_STATES:
         kind = "city"
 
-    cities = CITIES[country]
-    towns = TOWNS.get(country, [])
-    c_lat, c_lon = COUNTRY_META[country][3], COUNTRY_META[country][4]
+    pools = _pools(country)
+    lo, hi = (0.01, 0.07) if kind in ("city", "town") else (0.12, 0.55)
+    pool = pools["town" if kind == "rural" else kind]
 
-    if kind == "city":
-        name, lat, lon = rng.choice(cities)
-        lat += rng.uniform(-0.09, 0.09)
-        lon += rng.uniform(-0.09, 0.09)
-        label = name
+    # Try several anchors, not just several offsets. A single anchor sitting on
+    # a narrow coastal strip can fail every offset AND fail the land test at its
+    # own coordinate, which is how the fallback used to emit a point at sea.
+    for _ in range(6):
+        name, lat, lon = _pick(pool, rng)
+        plat, plon, ok = _scatter(country, lat, lon, lo, hi, rng)
+        if ok:
+            label = f"rural, near {name}" if kind == "rural" else name
+            return kind, label, plat, plon
+        if _valid(country, round(lat, 4), round(lon, 4)):
+            return ("town" if kind == "rural" else kind), name, round(lat, 4), round(lon, 4)
 
-    elif kind == "town":
-        if towns and rng.random() < 0.7:
-            name, lat, lon = rng.choice(towns)
-            lat += rng.uniform(-0.06, 0.06)
-            lon += rng.uniform(-0.06, 0.06)
-            label = name
-        else:
-            # Satellite of a metro: far enough out to separate on a map, close
-            # enough to still be that town's travel-to-work area.
-            name, lat, lon = rng.choice(cities)
-            bearing = rng.uniform(0, 2 * math.pi)
-            lat, lon = _offset(lat, lon, rng.uniform(0.18, 0.55), bearing)
-            label = f"near {name}"
-
-    else:  # rural
-        anchor = rng.choice(towns + cities if towns else cities)
-        name, lat, lon = anchor
-        toward = _bearing_toward(lat, lon, c_lat, c_lon)
-        # Bias inland: sample around the centroid bearing rather than uniformly,
-        # which keeps most rural points off the sea without a coastline test.
-        bearing = rng.gauss(toward, 0.9)
-        lat, lon = _offset(lat, lon, rng.uniform(0.35, 1.5), bearing)
-        label = f"rural, near {name}"
-
-    lat, lon = _clamp(country, lat, lon)
-    return kind, label, round(lat, 4), round(lon, 4)
+    # Every anchor tried failed validation. Return the last one and let the
+    # caller see a city-typed row rather than silently dropping the incident.
+    return "city", name, round(lat, 4), round(lon, 4)

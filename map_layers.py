@@ -151,9 +151,22 @@ def _bubble_layer(d: pd.DataFrame, vector_class: str):
 # --------------------------------------------------------------------------- #
 
 def build_map(a: IncidentAnalysis, out_path: str,
-              start_year: int = 2019, end_year: int = 2026) -> str:
+              start_year: int = 2019, end_year: int = 2026,
+              max_points: int = 6000, embed_js: bool = True) -> str:
     df = a.df.dropna(subset=["hq_lat", "hq_lon", "date_discovered"]).copy()
     df["yr"] = df["date_discovered"].dt.year
+
+    # Every point is repeated across 8 animation frames, so a 30k-row dataset
+    # produces a ~24 MB HTML file that pans and zooms sluggishly — bad on a
+    # projector. Sample the synthetic rows for DISPLAY only; all real incidents
+    # are always kept. Analysis still runs on the full dataset.
+    sampled_from = None
+    if len(df) > max_points:
+        sampled_from = len(df)
+        real = df[~df["is_synthetic"]]
+        syn = df[df["is_synthetic"]].sample(
+            n=max(max_points - len(real), 1), random_state=42)
+        df = pd.concat([real, syn]).sort_values("date_discovered")
     years = list(range(start_year, end_year + 1))
 
     def slice_to(y):
@@ -248,6 +261,10 @@ def build_map(a: IncidentAnalysis, out_path: str,
                  showcountries=True, countrycolor="white", coastlinecolor="#dfe4ea",
                  showframe=False, bgcolor="white", lataxis_range=[-58, 82]),
         paper_bgcolor="white", margin=dict(l=0, r=0, t=104, b=118),
+        # Explicit pixel height. Plotly's default container is height:100%, which
+        # collapses to zero inside a body with no height in some browsers — the
+        # page loads, the JS runs, and you see a blank white screen.
+        height=780, autosize=True,
         legend=dict(orientation="h", y=1.02, x=0.42, font=dict(size=11)),
         updatemenus=[
             dict(type="buttons", direction="right", x=0.01, y=1.10, xanchor="left",
@@ -284,11 +301,20 @@ def build_map(a: IncidentAnalysis, out_path: str,
                 "attacker location.<br>"
                 "Country patterns in the synthetic rows are artefacts of the generator's "
                 "country weights, not measurements. Only the real rows carry a real place."
+                + (f"<br><b>Displaying a random sample of {len(df):,} of {sampled_from:,} "
+                   "incidents</b> — all real incidents kept, synthetic sampled for browser "
+                   "performance. Percentages come from the full dataset."
+                   if sampled_from else "")
             ))],
     )
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    fig.write_html(out_path, include_plotlyjs="cdn", auto_play=False)
+    # embed_js=True inlines ~3.5 MB of plotly.js so the file works with no
+    # internet and on networks that block cdn.plot.ly. Default on: a map that
+    # fails to draw in the room is worse than a large file.
+    fig.write_html(out_path, include_plotlyjs=True if embed_js else "cdn",
+                   auto_play=False, full_html=True,
+                   default_height="780px", default_width="100%")
     return out_path
 
 
@@ -298,13 +324,20 @@ def main():
     p.add_argument("--out", default="figures/incident_map.html")
     p.add_argument("--start-year", type=int, default=2019)
     p.add_argument("--end-year", type=int, default=2026)
+    p.add_argument("--max-points", type=int, default=6000,
+                   help="display cap; real incidents are never dropped")
+    p.add_argument("--cdn", action="store_true",
+                   help="load plotly.js from CDN instead of embedding it "
+                        "(smaller file, but needs internet to render)")
     args = p.parse_args()
 
     a = IncidentAnalysis(args.csv)
-    path = build_map(a, args.out, args.start_year, args.end_year)
+    path = build_map(a, args.out, args.start_year, args.end_year, args.max_points,
+                     embed_js=not args.cdn)
     kb = os.path.getsize(path) // 1024
+    mode = "plotly.js embedded — works offline" if not args.cdn else "CDN — needs internet"
     print(f"Wrote {path} ({kb} KB, {len(a.df)} incidents, "
-          f"{args.start_year}-{args.end_year})")
+          f"{args.start_year}-{args.end_year})\n  {mode}")
 
 
 if __name__ == "__main__":

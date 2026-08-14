@@ -497,7 +497,7 @@ FIGURES = {
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", default="cyber_incidents.csv")
+    p.add_argument("--csv", default="extracted_files/cyber_incidents.csv")
     p.add_argument("--only", default=None, choices=list(FIGURES))
     p.add_argument("--out", default="figures")
     args = p.parse_args()

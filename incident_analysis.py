@@ -569,12 +569,15 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Label, absolute dates, and span lengths for plotting.
         """
+        
+        # Copies the following columns from the table
         out = self.df[[
             "incident_id", "incident_name", "organisation", "sector",
             "date_occurred", "date_discovered", "date_disclosed",
             "records_affected", "severity"
         ]].copy()
 
+        # Exposure days is the difference between the date discovered and the date occurred
         out["exposure_days"] = (
             out["date_discovered"] - out["date_occurred"]
         ).dt.days

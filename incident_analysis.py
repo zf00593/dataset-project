@@ -114,15 +114,19 @@ class IncidentAnalysis:
         )
         # Takes lgo base 10 on the number of records affected if greater than 0 (can't log 0)
         df["log10_records"] = np.log10(df["records_affected"].where(df["records_affected"] > 0))
-        #
+        
+        # Makes the severity column a categorical variable with an order of low, medium, high, critical
         df["severity"] = pd.Categorical(df["severity"], SEVERITY_ORDER, ordered=True)
+        
+        # Makes a boolean column for whether sensitive data was exposed based on the data types exposed column
         df["sensitive_data"] = df["data_types_exposed"].str.contains(
             "health|safeguarding|ssn_or_ni_number|bank_details|credit_card", na=False
         )
+        ### END of derived columns ###
 
+        ### ATTRIBUTES ###
         self.df = df
-        self.syn = df[df["is_synthetic"]].copy()
-        self.real = df[~df["is_synthetic"]].copy()
+        ### END of attributes ###
 
     # ------------------------------------------------------------------ #
     # Headline framing
@@ -137,15 +141,29 @@ class IncidentAnalysis:
         d = self.df
         return pd.Series({
             "incidents_total": len(d),
+            # Percentage of incidents whose initial access was a human-factor vector. It calculates using mean the proportion and then rounds it to 1 decimal place
             "pct_human_factor_entry": round(
                 (d["vector_class"] == "Human factor").mean() * 100, 1),
+            
+            # percentage of incidents found by someone else
             "pct_found_by_someone_else": round(
                 (d["detection_class"] == "Found by someone else").mean() * 100, 1),
+            
+            # median dwell time in days across all incidents
             "median_dwell_days": d["dwell_time_days"].median(),
+            
+            # Finds median dwell time for incidents that were found by someone else
+            # loc takes a condition and then selects the dwell_time_days column and then takes the median
             "median_dwell_days_external_detection": d.loc[
                 d["detection_class"] == "Found by someone else", "dwell_time_days"].median(),
+            
+            # Finds the percentage of supply chain incidents
             "pct_supply_chain": round(d["supply_chain"].mean() * 100, 1),
+            
+            # Finds the percentage of incidents that exposed sensitive data
             "pct_exposing_sensitive_data": round(d["sensitive_data"].mean() * 100, 1),
+            
+            # Finds the sum of all records affected across all incidents
             "people_affected_real_incidents": int(self.real["records_affected"].sum()),
         })
 
@@ -158,10 +176,13 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Counts and percentages by vector_class, split real vs synthetic.
         """
-        counts = pd.crosstab(self.df["vector_class"], self.df["is_synthetic"])
-        counts.columns = ["real", "synthetic"]
-        counts["total"] = counts.sum(axis=1)
+        
+        # counts how many times each vector class appears and then converts the count to dataframe called total
+        counts = self.df["vector_class"].value_counts().to_frame("total")
+        # For each vector class it finds the proportion that it was that vector class
         counts["pct_of_all"] = (counts["total"] / counts["total"].sum() * 100).round(1)
+
+        # Returns sorted by total in descending order
         return counts.sort_values("total", ascending=False)
 
     def top_vectors(self, n: int = 10):
@@ -664,14 +685,7 @@ class IncidentAnalysis:
     
     
         
-        unclassified = df["vector_class"] == "Other"
-        df.loc[unclassified, "vector_class"] = np.where(
-            df.loc[unclassified, "attack_vector"].str.contains(
-                "credential|phish|social engineering|supplier|MFA", case=False, na=False
-            ),
-            "Human factor",
-            "Technical",
-        )
+      
 
 
 if __name__ == "__main__":

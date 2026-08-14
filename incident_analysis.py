@@ -85,29 +85,34 @@ class IncidentAnalysis:
         ).dt.days
 
         # Classifies the attack vector into human factor, technical or other. Uses substring matching for unclassified vectors.
+        # NP select works like multiple if elif else statements
         df["vector_class"] = np.select(
-            [df["attack_vector"].isin(HUMAN_FACTOR_VECTORS),
-             df["attack_vector"].isin(TECHNICAL_VECTORS)],
-            ["Human factor", "Technical"],
-            default="Other",
+            [df["attack_vector"].isin(HUMAN_FACTOR_VECTORS), # first condition
+             df["attack_vector"].isin(TECHNICAL_VECTORS)], # second condition
+            ["Human factor", "Technical"], # choices
+            default="Other", # default value
         )
         
-        # Real rows carry free-text vectors ("Compromised credentials (no MFA)"),
-        # so fall back to substring matching for anything unclassified.
+
+        # Finds rows that are neith human factor or technical
         unclassified = df["vector_class"] == "Other"
+        
+        # Unclassified is a boolean column for vector_class as "Other", then it uses substring matching to see if the string contains any of the following in attack vector, it then makes it 
         df.loc[unclassified, "vector_class"] = np.where(
             df.loc[unclassified, "attack_vector"].str.contains(
                 "credential|phish|social engineering|supplier|MFA", case=False, na=False
             ),
-            "Human factor",
-            "Technical",
+            "Human factor", # if substring is found
+            "Technical", # if substring isn't found
         )
 
+        # Makes a column that checks if it was found in house or externally
         df["detection_class"] = np.where(
             df["detection_method"].isin(EXTERNAL_DETECTION),
             "Found by someone else",
             "Found in-house",
         )
+        # Takes lgo base 10 on the number of records affected if greater than 0 (can't log 0)
         df["log10_records"] = np.log10(df["records_affected"].where(df["records_affected"] > 0))
         df["severity"] = pd.Categorical(df["severity"], SEVERITY_ORDER, ordered=True)
         df["sensitive_data"] = df["data_types_exposed"].str.contains(

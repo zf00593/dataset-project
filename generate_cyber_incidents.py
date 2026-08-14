@@ -38,6 +38,7 @@ from datetime import date, timedelta
 from faker import Faker
 
 from geo_reference import CITIES, COUNTRY_META, REAL_HQ
+from settlements import place
 
 # --------------------------------------------------------------------------- #
 # Schema
@@ -55,6 +56,7 @@ class Incident:
     country_name: str
     region: str
     hq_city: str
+    settlement_type: str     # city / town / rural
     hq_lat: str
     hq_lon: str
     victim_scope: str        # local / national / multinational
@@ -321,6 +323,7 @@ def build_real_incidents() -> list[Incident]:
                 country_name=meta[0],
                 region=meta[1],
                 hq_city=city,
+                settlement_type="city",
                 hq_lat=str(lat),
                 hq_lon=str(lon),
                 victim_scope=scope,
@@ -579,11 +582,10 @@ def make_synthetic(idx: int, fake: Faker, rng: random.Random,
     # --- geography --------------------------------------------------------- #
     country = weighted(COUNTRIES, rng)
     meta = COUNTRY_META[country]
-    city, c_lat, c_lon = rng.choice(CITIES[country])
-    # Jitter by up to ~0.15 degrees so overlapping bubbles in the same city stay
-    # visually separable on a map. This is presentation jitter, not real location.
-    lat = round(c_lat + rng.uniform(-0.15, 0.15), 4)
-    lon = round(c_lon + rng.uniform(-0.15, 0.15), 4)
+    # Settlement-aware placement: city / town / rural, weighted by org type, so
+    # 30k rows spread across a country instead of stacking on ~71 metro anchors.
+    # Coordinates are fictional placements, not claims about a real location.
+    settlement, city, lat, lon = place(country, org_type, rng)
 
     scope = weighted(VICTIM_SCOPE[org_type], rng)
     if supply_chain and rng.random() < 0.5:
@@ -605,6 +607,7 @@ def make_synthetic(idx: int, fake: Faker, rng: random.Random,
         country_name=meta[0],
         region=meta[1],
         hq_city=city,
+        settlement_type=settlement,
         hq_lat=str(lat),
         hq_lon=str(lon),
         victim_scope=scope,

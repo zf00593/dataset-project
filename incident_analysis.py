@@ -290,7 +290,9 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Count, median and 90th-percentile disclosure lag per group.
         """
+        # Groups the data frame by whether the regulator was notified and then selects the disclosure lag days values for each group
         g = self.df.groupby("regulator_notified", observed=True)["disclosure_lag_days"]
+        # Checks the disclosure lag days for each group and returns a new data frame with the count, median and 90th percentile disclosure lag days for each group
         return pd.DataFrame({
             "count": g.size(),
             "median_days": g.median(),
@@ -307,7 +309,11 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: One row per sector, sorted by median records affected.
         """
+        # Groups by the different sectors
         g = self.df.groupby("sector", observed=True)
+        
+        # Finds the number of incidents, the median number affected and median dwell time days for each sector
+        # Finds the percentage of supply chain attacks, sensitive data leak and human factor for each sector
         out = pd.DataFrame({
             "incidents": g.size(),
             "median_records": g["records_affected"].median(),
@@ -317,7 +323,9 @@ class IncidentAnalysis:
             "pct_human_factor": (g["vector_class"]
                                  .apply(lambda s: (s == "Human factor").mean() * 100).round(1)),
         })
+        # Sorts by median number of records affected in eachs sector
         return out.sort_values("median_records", ascending=False)
+
 
     def vector_by_sector(self, normalise: bool = True):
         """Cross table of initial-access vector class against sector.
@@ -328,7 +336,9 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Sector by vector_class cross table.
         """
+        # Creates a cross table between the vector class and the sector
         ct = pd.crosstab(self.df["vector_class"], self.df["sector"])
+        # If normalise (parameter) is true it returns a table of percentages 
         return (ct / ct.sum() * 100).round(1) if normalise else ct
 
     def charity_vs_rest(self):
@@ -341,9 +351,14 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Side-by-side metrics for nonprofit vs other org types.
         """
+        # Creates a copy of the data frame
         d = self.df.copy()
+        # Adds a new group column that checks if the org type is nonprofit or not
         d["group"] = np.where(d["org_type"] == "nonprofit", "Nonprofit", "Other")
+        # Groups incident records by groups
         g = d.groupby("group", observed=True)
+        
+        # Returns a data frame with number of incidents in each group, median number of records affected, median estimated cost in USD, cost per record in USD, percentage of incidents that exposed sensitive data, percentage of incidents that were human factor and median dwell time days
         return pd.DataFrame({
             "incidents": g.size(),
             "median_records": g["records_affected"].median(),
@@ -369,7 +384,11 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Scale metrics split by whether a third party was involved.
         """
+        
+        # Groups incidents by whether supply chain or not
         g = self.df.groupby("supply_chain", observed=True)
+        
+        # shows number of incidents, median of records affected, 90th percentile of records affected, median dwell time days and median downstream orgs affected for each group
         out = pd.DataFrame({
             "incidents": g.size(),
             "median_records": g["records_affected"].median(),
@@ -377,13 +396,17 @@ class IncidentAnalysis:
             "median_dwell_days": g["dwell_time_days"].median(),
             "median_downstream_orgs": g["downstream_orgs_affected"].median(),
         })
+        # Maps the index to a new value of "Via third party" if True and "Direct" if False
         out.index = out.index.map({True: "Via third party", False: "Direct"})
+        
+        # Calculates the ratio of median records affected for each group against the median records affected for direct incidents and rounds it to 2 decimal places
+        # Ratio tells you how many more records are affected in supply chain incidents compared to direct incidents
         out["records_multiplier_vs_direct"] = (
             out["median_records"] / out.loc["Direct", "median_records"]).round(2)
         return out
 
-    def downstream_reach_real(self):
-        """[REAL-ONLY] Real supply-chain incidents ranked by downstream organisations hit.
+    def downstream_reach(self):
+        """ Real supply-chain incidents ranked by downstream organisations hit.
 
         Use these as annotated points over the synthetic distribution — they are
         the anchors that make the synthetic spread credible.
@@ -391,6 +414,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Real supply-chain incidents with reach, records and source.
         """
+        # Columns to keep in final output
         cols = [
             "incident_name",
             "organisation",
@@ -402,14 +426,16 @@ class IncidentAnalysis:
             "source"
         ]
 
+        # Filter self.df to rows where supply chian is true the orders them by the number of downstream orgs affected@
+        # Then sorts
         return (
             self.df[self.df["supply_chain"]][cols]
             .sort_values("downstream_orgs_affected", ascending=False)
             .reset_index(drop=True)
         )
 
-    def credential_led_incidents_real(self):
-        """[REAL-ONLY] Real incidents whose entry point was credentials or social engineering.
+    def credential_led_incidents(self):
+        """Real incidents whose entry point was credentials or social engineering.
 
         The list an audience should see immediately after being told that most
         breaches start with a person: recognisable names, mundane causes.

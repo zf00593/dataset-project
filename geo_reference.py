@@ -148,3 +148,14 @@ def country_name(iso2: str) -> str:
 def region(iso2: str) -> str:
     m = COUNTRY_META.get(iso2)
     return m[1] if m else "Unknown"
+
+
+# Plotly choropleths key on ISO-3166-1 alpha-3, not alpha-2. Without this the
+# choropleth layer renders completely blank with no error.
+ISO2_TO_ISO3 = {
+    "GB": "GBR", "IE": "IRL", "US": "USA", "CA": "CAN", "AU": "AUS", "NZ": "NZL",
+    "DE": "DEU", "FR": "FRA", "NL": "NLD", "CH": "CHE", "ES": "ESP", "IT": "ITA",
+    "SE": "SWE", "NO": "NOR", "DK": "DNK", "PL": "POL", "IN": "IND", "SG": "SGP",
+    "JP": "JPN", "KR": "KOR", "AE": "ARE", "ZA": "ZAF", "KE": "KEN", "NG": "NGA",
+    "BR": "BRA", "MX": "MEX",
+}

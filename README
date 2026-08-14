@@ -13,3 +13,5 @@ Layer 5 — time slider on date_discovered, driving all of the above. Animate 20
 Two caveats. The synthetic coordinates are city centroids with ±0.15° jitter so overlapping bubbles separate visually — that's presentation jitter, not real location, and shouldn't be described as anything else. And cross_border_exposure()'s synthetic side is driven by my data_subject_countries sampling, so the specific countries showing high import ratios are arbitrary; the pattern is real, the ranking isn't.
 
 For rendering: Plotly scatter_geo plus line_geo gets you layers 1–3 and 5 with a built-in animation frame; Folium or Kepler.gl if you want it standalone in a browser. Want me to build the map?
+
+"#048F8F", "#024646", "#011919", "#147190"

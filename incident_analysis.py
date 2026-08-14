@@ -219,7 +219,9 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Count, median, IQR and max dwell days per incident type.
         """
+        # Groups the data frame by incident type and then selects the dwell time days values fopr each group
         g = self.df.groupby("incident_type", observed=True)["dwell_time_days"]
+        # Creates a new data frame with the count, median, 25th percentile, 75th percentile and max dwell time days for each incident type  
         out = pd.DataFrame({
             "count": g.size(),
             "median_days": g.median(),
@@ -227,6 +229,7 @@ class IncidentAnalysis:
             "q75": g.quantile(0.75),
             "max_days": g.max(),
         })
+        # Sorts the incident types by median dwell time days
         return out.sort_values("median_days", ascending=False)
 
     def dwell_time_by_detection(self):
@@ -238,7 +241,13 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Count, median and mean dwell days per detection method.
         """
+        
+        # Groups by the detection class (in-house or found by someone else) and method (e.g. law enforcement)
+        # Selects dwell time days
         g = self.df.groupby(["detection_class", "detection_method"], observed=True)["dwell_time_days"]
+       
+        # Creates a new data frame with the count, median and mean dwell time days for each detection class and method
+        # Sorts descending by median dwell time dayas
         return pd.DataFrame({
             "count": g.size(),
             "median_days": g.median(),

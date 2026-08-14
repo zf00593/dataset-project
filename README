@@ -1,1 +1,15 @@
 https://www.kaggle.com/datasets/ramaguru/cyber-awareness-survey-avv-dsi-2022-set-1/data?select=Cyber_Awareness_Survey_12_March_2022_236.xlsx
+
+Layer 1 — bubbles at HQ, sized by records, coloured by vector_class. The base layer. Click a bubble, get the hover string and the incident detail. The immediate read is "human factor is most of the map, everywhere".
+
+Layer 2 — the arcs, filtered to supply_chain == True. This is the Beacon argument made spatial. One dot in Brighton with lines to every UK charity; one dot in Charleston with lines to six countries. It shows an audience that their data leaves their building and lands somewhere they've never audited. Toggle it on second, after the bubbles have settled.
+
+Layer 3 — choropleth, records_per_capita, not raw counts. Raw counts just redraw the population map — the US and UK dominate because that's where the data is. Per capita, the UK jumps to 5.26 records exposed per person against the US at 3.97, which is a much more arresting number for a British room.
+
+Layer 4 — cross_border_exposure() as a diverging choropleth. This is the sleeper. Italy, South Korea, Ireland and Norway all show large positive imported_exposure: they're named as affected far more often than they host the breached organisation. South Korea's import ratio is 14.8, Norway's 21.7. The message is that most of your risk originates outside your jurisdiction and outside your regulator's reach.
+
+Layer 5 — time slider on date_discovered, driving all of the above. Animate 2019→2026 and the map fills in.
+
+Two caveats. The synthetic coordinates are city centroids with ±0.15° jitter so overlapping bubbles separate visually — that's presentation jitter, not real location, and shouldn't be described as anything else. And cross_border_exposure()'s synthetic side is driven by my data_subject_countries sampling, so the specific countries showing high import ratios are arbitrary; the pattern is real, the ranking isn't.
+
+For rendering: Plotly scatter_geo plus line_geo gets you layers 1–3 and 5 with a built-in animation frame; Folium or Kepler.gl if you want it standalone in a browser. Want me to build the map?

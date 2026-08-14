@@ -263,10 +263,16 @@ class IncidentAnalysis:
         Returns:
             pd.Series: Group medians, U statistic, p-value and rank-biserial effect size.
         """
+        # Selects dwell time days for all incidents found by someone else
         a = self.df.loc[self.df["detection_class"] == "Found by someone else",
                          "dwell_time_days"].dropna()
+        # Selects dwell time days for all incidents found in house
         b = self.df.loc[self.df["detection_class"] == "Found in-house",
                          "dwell_time_days"].dropna()
+        
+        # Seses if the dwell time days have different distributions
+        # u statistic represents how the rankings differ
+        # p tells us if it is significant
         u, p = stats.mannwhitneyu(a, b, alternative="two-sided")
         return pd.Series({
             "n_external": len(a),

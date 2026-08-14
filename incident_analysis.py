@@ -164,7 +164,7 @@ class IncidentAnalysis:
             "pct_exposing_sensitive_data": round(d["sensitive_data"].mean() * 100, 1),
             
             # Finds the sum of all records affected across all incidents
-            "people_affected_real_incidents": int(self.real["records_affected"].sum()),
+            "people_affected__incidents": int(self.df["records_affected"].sum()),
         })
 
     def awareness_preventable_share(self):

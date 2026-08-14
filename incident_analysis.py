@@ -582,16 +582,23 @@ class IncidentAnalysis:
             out["date_discovered"] - out["date_occurred"]
         ).dt.days
 
+
         out["notification_days"] = (
             out["date_disclosed"] - out["date_discovered"]
         ).dt.days
 
+        # Total days is the sum of the days the data was exposed and the days it took to notify
         out["total_days"] = out["exposure_days"] + out["notification_days"]
 
+        # Creates a new column called label that is the first 38 characters of the organisation name
         out["label"] = out["organisation"].str.slice(0, 38)
 
+        # Creates a boolean variabe that is true or false depending on if sort by starts with date
         ascending = sort_by.startswith("date")
 
+        # SOrts the data frame by the sort by column in ascending or descending order depending on the sort_by attribute
+        # takes the top n rows
+        # resets the index
         return (
             out.sort_values(sort_by, ascending=ascending)
             .head(top_n)
@@ -611,6 +618,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Longest exposure windows with scale and detection route.
         """
+        # Names of columns
         cols = [
             "incident_name",
             "organisation",
@@ -620,6 +628,7 @@ class IncidentAnalysis:
             "records_affected"
         ]
 
+        #  Sorts by the dwell time, takes the top n rows and copies the data frame 
         out = (
             self.df[cols]
             .sort_values("dwell_time_days", ascending=False)
@@ -627,8 +636,10 @@ class IncidentAnalysis:
             .copy()
         )
 
+        # Creates a new column called dwell months which is the dwell days divided by average month length
         out["dwell_months"] = (out["dwell_time_days"] / 30.44).round(1)
 
+        # Returns the incidents sorted by dwell days (exposure)
         return out.reset_index(drop=True)
 
     def response_lag_decomposition(self, subset: str = "real", top_n: int = 20):
@@ -644,18 +655,19 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Two-segment breakdown per incident, longest total first.
         """
+        
+        # Calls the lifecycle_timeline method to get the exposure and notification days for each incident
         t = self.lifecycle_timeline(subset=subset, top_n=10**6)
+        
+        # Selects the columns needed for the output data frame
         out = t[["label", "sector", "exposure_days", "notification_days", "total_days"]]
+        
+        # Sorts the data frame by total days in descending order, takes the top n rows and resets the index
         return out.sort_values("total_days", ascending=False).head(top_n).reset_index(drop=True)
 
     def incident_volume_timeline(self, freq: str = "Q", by: str = "incident_type",
                                  cumulative: bool = False):
         """Incident counts over time, optionally cumulative, split by a category.
-
-        Note: synthetic dates are drawn uniformly over the generator's window, so
-        the synthetic series is flat by construction. Any slope you see there is
-        noise. For a genuine trend line, filter to real rows — accepting that
-        n=27 makes it illustrative only.
 
         Args:
             freq (str): Pandas offset alias, e.g. "M", "Q", "Y".
@@ -666,12 +678,20 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Period index by category counts.
         """
+        # Drops rows with missing date_discovered values
         d = self.df.dropna(subset=["date_discovered"])
+        
+        # Converts the date_discovered column to a period with the specified frequency
         periods = d["date_discovered"].dt.to_period(freq)
+        
+        # Creates a cross table of frequency by the specified category and the periods
         ct = pd.crosstab(periods, d[by])
+        # Converts the index of the cross table to string
         ct.index = ct.index.astype(str)
+        
+        # If cumulative is true it returns the cumulative sum (as it goes down it sums) of the cross table otherwise it returns the cross table
         return ct.cumsum() if cumulative else ct
-
+1
     def cumulative_records_timeline(self, subset: str = "real", freq: str = "Y"):
         """Running total of people whose data was exposed, over time.
 
@@ -685,15 +705,19 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Period, records in period, and cumulative total.
         """
+        # Drops rows with missing date_disclosed or records_affected values
         d = self.df.dropna(subset=["date_disclosed", "records_affected"])
 
+        # Converts date disclosed into period of frequency and then groups by those buckets
         g = d.groupby(d["date_disclosed"].dt.to_period(freq), observed=True)
 
+        # Creates a data frame with the number of incidents and the sum of records affected for each period
         out = pd.DataFrame({
             "incidents": g.size(),
             "records_in_period": g["records_affected"].sum(),
         })
 
+        # Creates a new column called cumulative records which is the cumulative sum of the records in period column
         out["cumulative_records"] = out["records_in_period"].cumsum()
 
         out.index = out.index.astype(str)

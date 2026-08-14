@@ -676,7 +676,7 @@ class IncidentAnalysis:
 
 if __name__ == "__main__":
     pd.set_option("display.width", 140)
-    a = IncidentAnalysis("cyber_incidents.csv")
+    a = IncidentAnalysis("extracted_files/cyber_incidents.csv")
     for name in ("headline_stats", "awareness_preventable_share", "dwell_time_by_detection",
                  "dwell_gap_significance", "supply_chain_blast_radius", "charity_vs_rest",
                  "correlation_matrix", "real_vs_synthetic_calibration",

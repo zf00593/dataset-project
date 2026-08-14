@@ -396,81 +396,10 @@ def fig_correlation(a):
 # --------------------------------------------------------------------------- #
 
 def fig_map(a):
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots  # noqa: F401
-
-    pts = a.map_points("all")
-    flows = a.map_flows("all", top_n=250)
-    countries = a.incidents_by_country(per_capita=True)
-    xb = a.cross_border_exposure().reset_index(names="iso2")
-
-    fig = go.Figure()
-
-    # Layer 1: choropleth, records per capita
-    fig.add_trace(go.Choropleth(
-        locations=countries["country"].map(ISO2_TO_ISO3),
-        z=countries["records_per_capita"], text=countries["country_name"],
-        colorscale="Blues", marker_line_color="white", marker_line_width=0.4,
-        colorbar_title="Records<br>per capita", visible=True, name="Records per capita",
-        hovertemplate="%{text}<br>%{z:.2f} records exposed per person<extra></extra>",
-    ))
-
-    # Layer 2: arcs, data leaving the HQ country
-    for _, r in flows.iterrows():
-        fig.add_trace(go.Scattergeo(
-            lon=[r["hq_lon"], r["dest_lon"]], lat=[r["hq_lat"], r["dest_lat"]],
-            mode="lines", line=dict(width=0.6, color="rgba(193,68,47,0.28)"),
-            hoverinfo="skip", showlegend=False, visible=False, meta="flow",
-        ))
-
-    # Layer 3: incident bubbles
-    for synth, colour, label in [(False, REAL, "Real incidents"),
-                                 (True, "rgba(136,150,166,0.55)", "Synthetic incidents")]:
-        s = pts[pts["is_synthetic"] == synth]
-        fig.add_trace(go.Scattergeo(
-            lon=s["hq_lon"], lat=s["hq_lat"], text=s["hover"], name=label,
-            mode="markers",
-            marker=dict(size=np.clip(s["bubble_size"] / 260, 4, 42), color=colour,
-                        line=dict(width=0.5, color="white"), opacity=0.85),
-            customdata=np.stack([s["sector"], s["vector_class"],
-                                 s["records_affected"].fillna(0)], axis=-1),
-            hovertemplate="<b>%{text}</b><br>%{customdata[0]}<br>"
-                          "Entry: %{customdata[1]}<br>"
-                          "People affected: %{customdata[2]:,.0f}<extra></extra>",
-        ))
-
-    n_flow = len(flows)
-    base = 1
-    fig.update_layout(
-        title=dict(text="Where breaches happen, and where the data ends up",
-                   x=0.02, font=dict(size=18)),
-        geo=dict(projection_type="natural earth", showland=True, landcolor="#f4f6f8",
-                 showcountries=True, countrycolor="white", coastlinecolor="#dfe4ea",
-                 showframe=False, bgcolor="white"),
-        margin=dict(l=0, r=0, t=70, b=90), paper_bgcolor="white",
-        legend=dict(orientation="h", y=-0.02, x=0.02),
-        updatemenus=[dict(
-            type="buttons", direction="right", x=0.02, y=1.06, showactive=True,
-            buttons=[
-                dict(label="Incidents only", method="update",
-                     args=[{"visible": [True] + [False] * n_flow + [True, True]}]),
-                dict(label="Show data flows", method="update",
-                     args=[{"visible": [True] + [True] * n_flow + [True, True]}]),
-            ])],
-        annotations=[dict(
-            x=0.02, y=-0.12, xref="paper", yref="paper", showarrow=False, align="left",
-            font=dict(size=10, color=MUTED),
-            text=("Bubble size = people affected (sqrt-scaled). Green = 27 real public "
-                  "incidents; grey = 1,000 synthetic.<br>"
-                  "Arcs show where affected people live relative to the breached "
-                  "organisation's HQ — they are NOT attacker origin.<br>"
-                  "Choropleth and synthetic points are generated data; country-level "
-                  "patterns in the synthetic set are sampling artefacts, not measurements."),
-        )],
-    )
+    """Delegates to map_layers.build_map — the five-layer interactive map."""
+    from map_layers import build_map
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, "16_incident_map.html")
-    fig.write_html(path, include_plotlyjs="cdn")
+    path = build_map(a, os.path.join(OUT, "16_incident_map.html"))
     print(f"  {path}")
     return path
 
@@ -497,7 +426,7 @@ FIGURES = {
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", default="extracted_files/cyber_incidents.csv")
+    p.add_argument("--csv", default="cyber_incidents.csv")
     p.add_argument("--only", default=None, choices=list(FIGURES))
     p.add_argument("--out", default="figures")
     args = p.parse_args()

@@ -1,30 +1,10 @@
 #!/usr/bin/env python3
 """
 generate_cyber_incidents.py
-===========================
-
-Builds a cyber-incident dataset that mixes:
-
-  1. REAL, publicly reported incidents (is_synthetic = False), hand-curated from
-     public reporting. Figures are "as reported at the time" and several are still
-     provisional (notably Beacon CRM, July 2026, where the investigation is ongoing).
-     VERIFY against the cited primary source before using any real row in published
-     work, a risk register, or anything a regulator will read.
-
-  2. SYNTHETIC incidents (is_synthetic = True) generated with Faker + weighted
-     sampling, with dependencies between fields so the fakes are statistically
-     plausible rather than uniform noise (e.g. ransomware implies a ransom demand
-     and downtime; supply-chain compromise implies many downstream orgs and a
-     long dwell time).
-
-Every row carries `is_synthetic`. Never strip that column. Synthetic organisation
-names are Faker-generated and may coincidentally collide with a real company —
-they are not claims about any real entity.
+======
 
 Usage:
     python generate_cyber_incidents.py --rows 1000 --seed 42 --out cyber_incidents.csv
-
-Requires: faker  (pip install faker)
 """
 
 from __future__ import annotations
@@ -67,7 +47,7 @@ class Incident:
     threat_actor_type: str   # ransomware crew / nation state / hacktivist / insider / unknown
     supply_chain: bool       # was the victim hit via a third party, or was it the third party?
     downstream_orgs_affected: str   # int, or "" when unknown / not applicable
-    date_occurred: str       # ISO date (first intrusion, best estimate)
+    date_occurred: str       # ISO date (first intrusione)
     date_discovered: str
     date_disclosed: str
     dwell_time_days: str
@@ -88,11 +68,8 @@ class Incident:
 CSV_COLUMNS = [f.name for f in dc_fields(Incident)]
 
 
-# --------------------------------------------------------------------------- #
+
 # 1. Real incidents (public reporting; figures as reported)
-# --------------------------------------------------------------------------- #
-# Ordered roughly by relevance to the charity / third-party-CRM threat model.
-# fmt: off
 REAL_INCIDENTS = [
     # name, org, org_type, sector, country, inc_type, vector, actor, actor_type,
     # supply_chain, downstream, occurred, discovered, disclosed, detection,
@@ -300,18 +277,26 @@ REAL_INCIDENTS = [
 
 def build_real_incidents() -> list[Incident]:
     out: list[Incident] = []
+    
+    # Uterates through each real incident and indexes them
     for i, row in enumerate(REAL_INCIDENTS, start=1):
         (name, org, org_type, sector, country, inc_type, vector, actor, actor_type,
          supply_chain, downstream, occurred, discovered, disclosed, detection, records,
          data_types, ransom_demand, ransom_paid, downtime, cost, regulator, severity,
          source, notes) = row
 
+        # Converts date occurred and discovered into time format
         d_occ = date.fromisoformat(occurred)
         d_dis = date.fromisoformat(discovered)
+        
+        # Uses the REAL_HQ dictionary to get the headquarters information for the organisation, or defaults to unknown values if not found
         city, lat, lon, scope, subjects = REAL_HQ.get(
             org, ("", float("nan"), float("nan"), "unknown", country))
+        
+        # Gets the country metadata from country meta dictionary
         meta = COUNTRY_META.get(country, (country, "Unknown"))
 
+        # Fills in the records based on the metadata.
         out.append(
             Incident(
                 incident_id=f"REAL-{i:04d}",
@@ -354,10 +339,7 @@ def build_real_incidents() -> list[Incident]:
         )
     return out
 
-
-# --------------------------------------------------------------------------- #
-# 2. Synthetic generation
-# --------------------------------------------------------------------------- #
+### Synthetic generator ###
 
 SECTORS = {
     # sector: (weight, org_type, typical log10 records mean, regulator-heavy?)
@@ -377,6 +359,8 @@ SECTORS = {
     "Legal/Professional":     (0.03, "private",   4.0, True),
 }
 
+
+# Adds weights to each country based on the likelihood of incidents occurring there
 COUNTRIES = {"GB": 0.26, "US": 0.24, "IE": 0.03, "AU": 0.05, "CA": 0.04, "DE": 0.05,
              "FR": 0.04, "NL": 0.03, "IN": 0.04, "SG": 0.02, "NZ": 0.02, "CH": 0.02,
              "ES": 0.02, "IT": 0.02, "SE": 0.02, "NO": 0.01, "DK": 0.01, "PL": 0.02,
@@ -392,6 +376,7 @@ VICTIM_SCOPE = {
     "vendor":    {"local": 0.05, "national": 0.40, "multinational": 0.55},
 }
 
+# Weights for different incident types
 INCIDENT_TYPES = {
     "Ransomware": 0.30,
     "Data breach": 0.28,
@@ -404,7 +389,7 @@ INCIDENT_TYPES = {
     "Destructive malware": 0.01,
 }
 
-# Initial-access vectors conditioned on incident type.
+# Initial-access vectors conditioned on incident type and their weights
 VECTORS_BY_TYPE = {
     "Ransomware": {"Compromised credentials": 0.30, "Phishing": 0.22,
                    "Unpatched vulnerability": 0.20, "Exposed RDP/VPN": 0.16,
@@ -429,17 +414,18 @@ VECTORS_BY_TYPE = {
                             "Unpatched vulnerability": 0.25},
 }
 
+# The type of actors or weights
 ACTOR_TYPES = {
     "Ransomware crew": 0.42, "Financially motivated": 0.24, "Unknown": 0.16,
     "Nation state": 0.09, "Hacktivist": 0.05, "Insider": 0.04,
 }
 
-# Fictional actor names, deliberately not real crew names, so synthetic rows can
-# never be mistaken for attributed reporting.
+# Different crews that are used to generate incidents
 FAKE_CREWS = ["PaleHydra", "CobaltFinch", "GlassMantis", "RustVulture", "NineSpindle",
               "ObsidianKoi", "TinCathedral", "SlateWarden", "HollowLantern", "DimStag",
               "AmberBastion", "QuietFathom", "IronMagpie", "VelvetSiphon", "NorthQuarry"]
 
+# Detection methods and their weights
 DETECTION = {"Internal detection": 0.34, "Third-party notification": 0.20,
              "Security vendor / MDR": 0.14, "Law enforcement notification": 0.09,
              "Customer report": 0.09, "Public leak / dark web": 0.08,

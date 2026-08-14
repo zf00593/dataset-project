@@ -691,7 +691,7 @@ class IncidentAnalysis:
         
         # If cumulative is true it returns the cumulative sum (as it goes down it sums) of the cross table otherwise it returns the cross table
         return ct.cumsum() if cumulative else ct
-1
+
     def cumulative_records_timeline(self, subset: str = "real", freq: str = "Y"):
         """Running total of people whose data was exposed, over time.
 
@@ -720,6 +720,7 @@ class IncidentAnalysis:
         # Creates a new column called cumulative records which is the cumulative sum of the records in period column
         out["cumulative_records"] = out["records_in_period"].cumsum()
 
+        # Turens the index to a string
         out.index = out.index.astype(str)
 
         return out
@@ -734,7 +735,10 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Year by category median dwell days.
         """
+        # Drops any rows with missing years
         d = self.df.dropna(subset=["year"])
+        
+        # Creates a pivot table with the year as the index, the specified category as columns, and the median dwell time days as values
         return (d.pivot_table(index="year", columns=by, values="dwell_time_days",
                               aggfunc="median", observed=True).round(1))
 
@@ -747,8 +751,12 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Sector rows by period columns.
         """
+        # drops records with no date discovered
         d = self.df.dropna(subset=["date_discovered"])
+        # Creates a new column called periods which is the date discovered converted to a period with the specified frequency and then converted to string
         periods = d["date_discovered"].dt.to_period(freq).astype(str)
+        
+        # returns a cross table of sector by periods showing the number of incidents for each sector in each period
         return pd.crosstab(d["sector"], periods)
 
     def beacon_event_timeline(self):
@@ -767,6 +775,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Dated milestones with actor, day offset and phase.
         """
+        # Beacon event timeline events
         events = [
             ("2026-07-27", "Latest data known to be in the copied backups",
              "Attacker", "Exposure"),
@@ -782,8 +791,13 @@ class IncidentAnalysis:
             ("2026-08-05", "ICO confirms it has received reports from affected "
              "organisations", "Regulator", "Response"),
         ]
+        
+        # Creates a data frame with the events list and creates the columns
         out = pd.DataFrame(events, columns=["date", "event", "actor", "phase"])
+        # Converts the date column to date time format
         out["date"] = pd.to_datetime(out["date"])
+        
+        # Finds the date offset by subtracting the minimum date from each date and converting it to days to see how much after the first event this happened
         out["day_offset"] = (out["date"] - out["date"].min()).dt.days
         return out
 
@@ -796,15 +810,26 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: One row per dated milestone, with days from first event.
         """
+        # Filters the data frame to the row where the incident_id matches the input incident_id
         row = self.df[self.df["incident_id"] == incident_id]
+        
+        
         if row.empty:
             raise KeyError(f"No incident with id {incident_id!r}")
+        
+        # Selects the first row of the filtered data frame
         row = row.iloc[0]
+        
+        # Creates a new data frame with the milestones and their corresponding dates
         out = pd.DataFrame({
             "milestone": ["Intrusion begins", "Discovered", "Disclosed"],
             "date": [row["date_occurred"], row["date_discovered"], row["date_disclosed"]],
         }).dropna(subset=["date"])
+        
+        # The day offset is the number of days from the first event (intrusion) to each milestone
         out["day_offset"] = (out["date"] - out["date"].min()).dt.days
+        
+        # Adds the incident name and organisation to the output data frame
         out["incident_name"] = row["incident_name"]
         out["organisation"] = row["organisation"]
         return out

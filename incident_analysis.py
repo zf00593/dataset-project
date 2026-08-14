@@ -443,6 +443,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Real human-factor incidents with scale and source.
         """
+        # gets columns
         cols = [
             "incident_name",
             "organisation",
@@ -454,6 +455,8 @@ class IncidentAnalysis:
             "source"
         ]
 
+        # Finds all records where the vector is human factor
+        # Sorts by the date discovered and resets index
         return (
             self.df[self.df["vector_class"] == "Human factor"][cols]
             .sort_values("date_discovered", ascending=False)
@@ -477,7 +480,9 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Period by incident_type counts.
         """
+        # Creates a new column called quarter if freq is quarter and year if freq is year
         key = "quarter" if freq == "quarter" else "year"
+        # Returns a cross table of the incident_type by the frequency showing the number of incidents for each year and incident type
         return pd.crosstab(self.df[key], self.df["incident_type"])
 
     def correlation_matrix(self, method: str = "spearman", drop_derived: bool = True):
@@ -492,10 +497,14 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Correlation matrix of numeric impact columns.
         """
+        # Gets the columns needed
         cols = ["records_affected", "dwell_time_days", "downtime_days",
                 "downstream_orgs_affected", "disclosure_lag_days", "ransom_demanded_usd"]
+
+        # Optiionally adds estimated cost
         if not drop_derived:
             cols.append("estimated_cost_usd")
+        # calculates the correlation between all the pairs of selected columns
         return self.df[cols].corr(method=method).round(3)
 
     def severity_by_vector_class(self):
@@ -509,6 +518,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Row-normalised percentages of severity per vector class.
         """
+        # Does a cross table between the attack vectors and severities into percentages
         ct = pd.crosstab(self.df["vector_class"], self.df["severity"],
                          normalize="index") * 100
         return ct.round(1)
@@ -519,7 +529,9 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: ransom_paid by severity counts, ransomware rows only.
         """
+        # Filters the data frame to only include rows with ransomware and destructive malware
         r = self.df[self.df["incident_type"].isin(["Ransomware", "Destructive malware"])]
+        # Returns a crosstable between ransom payment and severity
         return pd.crosstab(r["ransom_paid"], r["severity"])
 
     def missingness_profile(self):
@@ -531,6 +543,7 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Percent missing per column for each subset.
         """
+        # Finds the percentage of values missing in each column and returns a data frame with the percentage of missing values for each column sorted in descending order
         return pd.DataFrame({
             "pct_missing": (self.df.isna().mean() * 100).round(1),
         }).sort_values("pct_missing", ascending=False)

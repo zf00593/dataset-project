@@ -254,9 +254,9 @@ class IncidentAnalysis:
         Returns:
             pd.Series: Group medians, U statistic, p-value and rank-biserial effect size.
         """
-        a = self.syn.loc[self.syn["detection_class"] == "Found by someone else",
+        a = self.df.loc[self.df["detection_class"] == "Found by someone else",
                          "dwell_time_days"].dropna()
-        b = self.syn.loc[self.syn["detection_class"] == "Found in-house",
+        b = self.df.loc[self.df["detection_class"] == "Found in-house",
                          "dwell_time_days"].dropna()
         u, p = stats.mannwhitneyu(a, b, alternative="two-sided")
         return pd.Series({
@@ -376,11 +376,22 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Real supply-chain incidents with reach, records and source.
         """
-        cols = ["incident_name", "organisation", "sector", "date_discovered",
-                "downstream_orgs_affected", "records_affected", "attack_vector", "source"]
-        return (self.real[self.real["supply_chain"]][cols]
-                .sort_values("downstream_orgs_affected", ascending=False)
-                .reset_index(drop=True))
+        cols = [
+            "incident_name",
+            "organisation",
+            "sector",
+            "date_discovered",
+            "downstream_orgs_affected",
+            "records_affected",
+            "attack_vector",
+            "source"
+        ]
+
+        return (
+            self.df[self.df["supply_chain"]][cols]
+            .sort_values("downstream_orgs_affected", ascending=False)
+            .reset_index(drop=True)
+        )
 
     def credential_led_incidents_real(self):
         """[REAL-ONLY] Real incidents whose entry point was credentials or social engineering.
@@ -391,11 +402,22 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Real human-factor incidents with scale and source.
         """
-        cols = ["incident_name", "organisation", "sector", "date_discovered",
-                "attack_vector", "records_affected", "estimated_cost_usd", "source"]
-        return (self.real[self.real["vector_class"] == "Human factor"][cols]
-                .sort_values("date_discovered", ascending=False)
-                .reset_index(drop=True))
+        cols = [
+            "incident_name",
+            "organisation",
+            "sector",
+            "date_discovered",
+            "attack_vector",
+            "records_affected",
+            "estimated_cost_usd",
+            "source"
+        ]
+
+        return (
+            self.df[self.df["vector_class"] == "Human factor"][cols]
+            .sort_values("date_discovered", ascending=False)
+            .reset_index(drop=True)
+        )
 
     # ------------------------------------------------------------------ #
     # Trends and correlation
@@ -469,24 +491,8 @@ class IncidentAnalysis:
             pd.DataFrame: Percent missing per column for each subset.
         """
         return pd.DataFrame({
-            "real_pct_missing": (self.real.isna().mean() * 100).round(1),
-            "synthetic_pct_missing": (self.syn.isna().mean() * 100).round(1),
-        }).sort_values("synthetic_pct_missing", ascending=False)
-
-    def real_vs_synthetic_calibration(self):
-        """Quantile comparison of records affected, real vs synthetic.
-
-        A methods check, not a finding: if these columns diverge sharply, the
-        generator's lognormal parameters need retuning before anyone models on it.
-
-        Returns:
-            pd.DataFrame: Deciles of records_affected for each subset.
-        """
-        qs = [0.1, 0.25, 0.5, 0.75, 0.9, 0.99]
-        return pd.DataFrame({
-            "real": self.real["records_affected"].quantile(qs),
-            "synthetic": self.syn["records_affected"].quantile(qs),
-        }).round(0)
+            "pct_missing": (self.df.isna().mean() * 100).round(1),
+        }).sort_values("pct_missing", ascending=False)
 
 
     # ------------------------------------------------------------------ #
@@ -509,17 +515,31 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Label, absolute dates, and span lengths for plotting.
         """
-        d = {"real": self.real, "synthetic": self.syn, "all": self.df}[subset]
-        out = d[["incident_id", "incident_name", "organisation", "sector",
-                 "date_occurred", "date_discovered", "date_disclosed",
-                 "records_affected", "severity"]].copy()
-        out["exposure_days"] = (out["date_discovered"] - out["date_occurred"]).dt.days
-        out["notification_days"] = (out["date_disclosed"] - out["date_discovered"]).dt.days
+        out = self.df[[
+            "incident_id", "incident_name", "organisation", "sector",
+            "date_occurred", "date_discovered", "date_disclosed",
+            "records_affected", "severity"
+        ]].copy()
+
+        out["exposure_days"] = (
+            out["date_discovered"] - out["date_occurred"]
+        ).dt.days
+
+        out["notification_days"] = (
+            out["date_disclosed"] - out["date_discovered"]
+        ).dt.days
+
         out["total_days"] = out["exposure_days"] + out["notification_days"]
+
         out["label"] = out["organisation"].str.slice(0, 38)
+
         ascending = sort_by.startswith("date")
-        return (out.sort_values(sort_by, ascending=ascending)
-                .head(top_n).reset_index(drop=True))
+
+        return (
+            out.sort_values(sort_by, ascending=ascending)
+            .head(top_n)
+            .reset_index(drop=True)
+        )
 
     def exposure_window_ranking(self, subset: str = "all", top_n: int = 15):
         """Incidents ranked by how long the attacker went unnoticed.
@@ -534,11 +554,24 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Longest exposure windows with scale and detection route.
         """
-        d = {"real": self.real, "synthetic": self.syn, "all": self.df}[subset]
-        cols = ["incident_name", "organisation", "sector", "dwell_time_days",
-                "detection_method", "records_affected", "is_synthetic"]
-        out = d[cols].sort_values("dwell_time_days", ascending=False).head(top_n).copy()
+        cols = [
+            "incident_name",
+            "organisation",
+            "sector",
+            "dwell_time_days",
+            "detection_method",
+            "records_affected"
+        ]
+
+        out = (
+            self.df[cols]
+            .sort_values("dwell_time_days", ascending=False)
+            .head(top_n)
+            .copy()
+        )
+
         out["dwell_months"] = (out["dwell_time_days"] / 30.44).round(1)
+
         return out.reset_index(drop=True)
 
     def response_lag_decomposition(self, subset: str = "real", top_n: int = 20):
@@ -595,16 +628,21 @@ class IncidentAnalysis:
         Returns:
             pd.DataFrame: Period, records in period, and cumulative total.
         """
-        d = {"real": self.real, "synthetic": self.syn, "all": self.df}[subset]
-        d = d.dropna(subset=["date_disclosed", "records_affected"])
+        d = self.df.dropna(subset=["date_disclosed", "records_affected"])
+
         g = d.groupby(d["date_disclosed"].dt.to_period(freq), observed=True)
+
         out = pd.DataFrame({
             "incidents": g.size(),
             "records_in_period": g["records_affected"].sum(),
         })
+
         out["cumulative_records"] = out["records_in_period"].cumsum()
+
         out.index = out.index.astype(str)
+
         return out
+
 
     def dwell_trend_by_year(self, by: str = "vector_class"):
         """Median dwell time per year, split by a category.

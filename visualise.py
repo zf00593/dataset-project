@@ -121,8 +121,8 @@ def fig_top_vectors(a):
     return _save(fig, "02_top_vectors")
 
 
-def fig_credential_led_real(a):
-    d = a.credential_led_incidents_real().head(12).iloc[::-1]
+def fig_credential_led(a):
+    d = a.credential_led_incidents().head(12).iloc[::-1]
     d = d[d["records_affected"].notna()]
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     ax.barh(d["organisation"].str.slice(0, 34), d["records_affected"], color=REAL)
@@ -132,7 +132,7 @@ def fig_credential_led_real(a):
     ax.set_title("Real breaches that started with a person")
     _note(fig, "Real incidents only. Entry via credentials, phishing, social engineering or "
                "supplier access. Figures as publicly reported; see source column.")
-    return _save(fig, "03_credential_led_real")
+    return _save(fig, "03_credential_led")
 
 
 # --------------------------------------------------------------------------- #
@@ -236,16 +236,20 @@ def fig_lifecycle_gantt(a):
 
 def fig_exposure_ranking(a):
     d = a.exposure_window_ranking("all", 15).iloc[::-1]
-    colours = [REAL if not s else MUTED for s in d["is_synthetic"]]
+
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
-    labels = (d["organisation"].str.slice(0, 30)
-              + np.where(d["is_synthetic"], " (synthetic)", ""))
-    ax.barh(labels, d["dwell_months"], color=colours)
+
+    labels = d["organisation"].str.slice(0, 30)
+
+    ax.barh(labels, d["dwell_months"], color=REAL)
+
     ax.set_xlabel("Months undetected")
     ax.set_title("Longest time attackers went unnoticed")
-    _note(fig, "Real incidents in green, synthetic in grey. Synthetic dwell is drawn from "
-               "type-specific lognormals, not observed data.")
+
+    _note(fig, "Incidents ranked by how long attackers remained undetected.")
+
     return _save(fig, "08_exposure_ranking")
+
 
 
 def fig_volume_timeline(a):
@@ -277,7 +281,7 @@ def fig_supply_chain(a):
     axes[0].text(1, d.loc["Via third party", "median_records"], f"  {mult}x",
                  va="bottom", ha="center", fontweight="bold", color=HUMAN)
 
-    real = a.downstream_reach_real().dropna(subset=["downstream_orgs_affected"]).head(8).iloc[::-1]
+    real = a.downstream_reach().dropna(subset=["downstream_orgs_affected"]).head(8).iloc[::-1]
     axes[1].barh(real["organisation"].str.slice(0, 26), real["downstream_orgs_affected"],
                  color=REAL)
     axes[1].set_xscale("log")
@@ -335,20 +339,27 @@ def fig_charity_vs_rest(a):
 
 def fig_calibration(a):
     fig, ax = plt.subplots(figsize=(6.5, 4))
-    for label, series, colour in [("Real (n=27)", a.real["records_affected"], REAL),
-                                  ("Synthetic (n=1,000)", a.syn["records_affected"], MUTED)]:
-        s = series.dropna().sort_values()
-        ax.step(s, np.arange(1, len(s) + 1) / len(s), where="post", color=colour,
-                lw=2, label=label)
+
+    s = a.df["records_affected"].dropna().sort_values()
+
+    ax.step(
+        s,
+        np.arange(1, len(s) + 1) / len(s),
+        where="post",
+        color=REAL,
+        lw=2
+    )
+
     ax.set_xscale("log")
     ax.xaxis.set_major_formatter(FuncFormatter(_thousands))
     ax.set_xlabel("People affected (log scale)")
     ax.set_ylabel("Cumulative share of incidents")
-    ax.set_title("Real vs synthetic: these are not the same distribution")
-    ax.legend(frameon=False, fontsize=8)
-    _note(fig, "METHOD CHECK, NOT A FINDING. The real set is curated famous incidents, so it "
-               "is selection-biased toward the enormous. Do not pool the two sets.")
+    ax.set_title("Distribution of people affected by incidents")
+
+    _note(fig, "Cumulative distribution of affected records across all incidents.")
+
     return _save(fig, "13_calibration")
+
 
 
 def fig_missingness(a):
@@ -405,7 +416,7 @@ def fig_map(a):
 FIGURES = {
     "awareness": fig_awareness_share,
     "vectors": fig_top_vectors,
-    "credential": fig_credential_led_real,
+    "credential": fig_credential_led,
     "beacon": fig_beacon_timeline,
     "lag": fig_response_lag,
     "cumulative": fig_cumulative_records,

@@ -37,6 +37,8 @@ from datetime import date, timedelta
 
 from faker import Faker
 
+from geo_reference import CITIES, COUNTRY_META, REAL_HQ
+
 # --------------------------------------------------------------------------- #
 # Schema
 # --------------------------------------------------------------------------- #
@@ -50,6 +52,13 @@ class Incident:
     org_type: str            # private / public / nonprofit / vendor
     sector: str
     country: str
+    country_name: str
+    region: str
+    hq_city: str
+    hq_lat: str
+    hq_lon: str
+    victim_scope: str        # local / national / multinational
+    data_subject_countries: str  # pipe-delimited ISO2 of where affected people are
     incident_type: str       # ransomware, data breach, BEC, DDoS, ...
     attack_vector: str       # initial access
     threat_actor: str
@@ -297,6 +306,9 @@ def build_real_incidents() -> list[Incident]:
 
         d_occ = date.fromisoformat(occurred)
         d_dis = date.fromisoformat(discovered)
+        city, lat, lon, scope, subjects = REAL_HQ.get(
+            org, ("", float("nan"), float("nan"), "unknown", country))
+        meta = COUNTRY_META.get(country, (country, "Unknown"))
 
         out.append(
             Incident(
@@ -306,6 +318,13 @@ def build_real_incidents() -> list[Incident]:
                 org_type=org_type,
                 sector=sector,
                 country=country,
+                country_name=meta[0],
+                region=meta[1],
+                hq_city=city,
+                hq_lat=str(lat),
+                hq_lon=str(lon),
+                victim_scope=scope,
+                data_subject_countries=subjects,
                 incident_type=inc_type,
                 attack_vector=vector,
                 threat_actor=actor,
@@ -355,8 +374,20 @@ SECTORS = {
     "Legal/Professional":     (0.03, "private",   4.0, True),
 }
 
-COUNTRIES = {"GB": 0.32, "US": 0.30, "IE": 0.05, "AU": 0.06, "CA": 0.05, "DE": 0.06,
-             "FR": 0.05, "NL": 0.04, "IN": 0.04, "SG": 0.03}
+COUNTRIES = {"GB": 0.26, "US": 0.24, "IE": 0.03, "AU": 0.05, "CA": 0.04, "DE": 0.05,
+             "FR": 0.04, "NL": 0.03, "IN": 0.04, "SG": 0.02, "NZ": 0.02, "CH": 0.02,
+             "ES": 0.02, "IT": 0.02, "SE": 0.02, "NO": 0.01, "DK": 0.01, "PL": 0.02,
+             "JP": 0.02, "KR": 0.01, "AE": 0.01, "ZA": 0.01, "KE": 0.01, "NG": 0.01,
+             "BR": 0.01, "MX": 0.01}
+
+# Scope of who is affected, conditioned on org type. Vendors and private firms
+# spill across borders far more often than a local council or a small charity.
+VICTIM_SCOPE = {
+    "nonprofit": {"local": 0.35, "national": 0.55, "multinational": 0.10},
+    "public":    {"local": 0.45, "national": 0.53, "multinational": 0.02},
+    "private":   {"local": 0.15, "national": 0.55, "multinational": 0.30},
+    "vendor":    {"local": 0.05, "national": 0.40, "multinational": 0.55},
+}
 
 INCIDENT_TYPES = {
     "Ransomware": 0.30,
@@ -545,13 +576,39 @@ def make_synthetic(idx: int, fake: Faker, rng: random.Random,
 
     org = org_name(sector, org_type, fake, rng)
 
+    # --- geography --------------------------------------------------------- #
+    country = weighted(COUNTRIES, rng)
+    meta = COUNTRY_META[country]
+    city, c_lat, c_lon = rng.choice(CITIES[country])
+    # Jitter by up to ~0.15 degrees so overlapping bubbles in the same city stay
+    # visually separable on a map. This is presentation jitter, not real location.
+    lat = round(c_lat + rng.uniform(-0.15, 0.15), 4)
+    lon = round(c_lon + rng.uniform(-0.15, 0.15), 4)
+
+    scope = weighted(VICTIM_SCOPE[org_type], rng)
+    if supply_chain and rng.random() < 0.5:
+        scope = "multinational"          # vendor compromise rarely stops at a border
+    if scope == "multinational":
+        pool = [c for c in COUNTRIES if c != country]
+        extra = rng.sample(pool, k=rng.randint(2, 6))
+        subjects = "|".join([country] + sorted(extra))
+    else:
+        subjects = country
+
     return Incident(
         incident_id=f"SYN-{idx:05d}",
         incident_name=f"{inc_type} at {org}"[:120],
         organisation=org,
         org_type=org_type,
         sector=sector,
-        country=weighted(COUNTRIES, rng),
+        country=country,
+        country_name=meta[0],
+        region=meta[1],
+        hq_city=city,
+        hq_lat=str(lat),
+        hq_lon=str(lon),
+        victim_scope=scope,
+        data_subject_countries=subjects,
         incident_type=inc_type,
         attack_vector=vector,
         threat_actor=actor,

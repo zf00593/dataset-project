@@ -2,20 +2,6 @@
 incident_analysis.py
 ====================
 
-Analysis layer over cyber_incidents.csv (see generate_cyber_incidents.py).
-
-Every method returns a pandas object ready to plot — nothing here draws.
-
-TWO HEALTH WARNINGS, repeated in the relevant docstrings:
-
-  * Methods tagged [CIRCULAR] operate on fields that the generator derived from
-    other fields in the same row (`severity` from records/downtime/supply_chain;
-    `estimated_cost_usd` from records/downtime). They will always "work". They
-    are demo plumbing, not findings. Do not put them on a slide as evidence.
-
-  * `is_synthetic == False` rows number 27. They are annotations and anchors for
-    a real-world story, not a sample. No significance testing against them.
-
 Methods tagged [REAL-ONLY] use only the curated public incidents, and are the
 ones safe to quote to an audience — with the source column cited.
 """
@@ -26,9 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-# Initial-access vectors that a trained, alert human plausibly interrupts.
-# This split is the analytical backbone of the awareness argument, so it is
-# stated explicitly rather than buried in a method.
+# Human vectors for attacks
 HUMAN_FACTOR_VECTORS = {
     "Phishing",
     "Compromised credentials",
@@ -39,6 +23,7 @@ HUMAN_FACTOR_VECTORS = {
     "Third-party supplier access",
 }
 
+# Technical vectors for attacks
 TECHNICAL_VECTORS = {
     "Unpatched vulnerability",
     "Zero-day exploit",
@@ -64,34 +49,49 @@ SEVERITY_ORDER = ["low", "medium", "high", "critical"]
 
 
 class IncidentAnalysis:
-    """Analysis of a mixed real/synthetic cyber-incident dataset."""
+    """Analysis of a cyber-incident dataset."""
 
     def __init__(self, path: str = "cyber_incidents.csv"):
+        # Reads the csv
         df = pd.read_csv(path)
 
+        ### Type converstion ###
+        # Converts the column to datetime data type from string
         for col in ("date_occurred", "date_discovered", "date_disclosed"):
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
+        # Converts the columns to integer data type from string
         for col in ("records_affected", "downstream_orgs_affected", "dwell_time_days",
                     "ransom_demanded_usd", "downtime_days", "estimated_cost_usd"):
             df[col] = pd.to_numeric(df[col], errors="coerce")
+       
 
+        # Selects the columns, converts the value to string, makes them lowercase and then returns boolean by comparing if the string is "true"
         df["is_synthetic"] = df["is_synthetic"].astype(str).str.lower() == "true"
         df["supply_chain"] = df["supply_chain"].astype(str).str.lower() == "true"
+         ### END of type converstion ###
 
-        # --- derived columns ------------------------------------------------
+        ### Deriving new columns ###
+        
+        # Derives new column for date by using the datetime accessor and extract the year
         df["year"] = df["date_discovered"].dt.year
+        
+        # Converts the date into quarterly periods and then a string
         df["quarter"] = df["date_discovered"].dt.to_period("Q").astype(str)
+        
+        # Derives a new column for the time it took to disclose after discovery and turns it into a number of days
         df["disclosure_lag_days"] = (
             df["date_disclosed"] - df["date_discovered"]
         ).dt.days
 
+        # Classifies the attack vector into human factor, technical or other. Uses substring matching for unclassified vectors.
         df["vector_class"] = np.select(
             [df["attack_vector"].isin(HUMAN_FACTOR_VECTORS),
              df["attack_vector"].isin(TECHNICAL_VECTORS)],
             ["Human factor", "Technical"],
             default="Other",
         )
+        
         # Real rows carry free-text vectors ("Compromised credentials (no MFA)"),
         # so fall back to substring matching for anything unclassified.
         unclassified = df["vector_class"] == "Other"
@@ -131,7 +131,6 @@ class IncidentAnalysis:
         d = self.df
         return pd.Series({
             "incidents_total": len(d),
-            "real_incidents": len(self.real),
             "pct_human_factor_entry": round(
                 (d["vector_class"] == "Human factor").mean() * 100, 1),
             "pct_found_by_someone_else": round(

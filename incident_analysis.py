@@ -738,7 +738,7 @@ if __name__ == "__main__":
     a = IncidentAnalysis("extracted_files/cyber_incidents.csv")
     for name in ("headline_stats", "awareness_preventable_share", "dwell_time_by_detection",
                  "dwell_gap_significance", "supply_chain_blast_radius", "charity_vs_rest",
-                 "correlation_matrix", "real_vs_synthetic_calibration",
+                 "correlation_matrix",
                  "beacon_event_timeline", "response_lag_decomposition",
                  "cumulative_records_timeline", "exposure_window_ranking"):
         print(f"\n=== {name} ===")
